@@ -1,0 +1,256 @@
+{
+  "name": "Assistente de Investimentos com RPA e IA Generativa",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        16
+      ],
+      "id": "2aae3b06-fdb7-4f3d-ad3f-14bb9da2bff3",
+      "name": "Webhook",
+      "webhookId": "e5658df0-0e35-40ef-b886-54e72bcec760"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "https://drive.google.com/file/d/1wPUOf4smSkt1hYIG2D90n9vQxs7CxsXV/view?usp=sharing",
+          "mode": "url"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -272,
+        16
+      ],
+      "id": "98f93677-ec3f-43fb-9fbb-908af0235698",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "z8CDPAnw3Z1sBNPa",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Pega os clientes vindos do nó Webhook\nconst webhookData = $('Webhook').first().json;\nconst clientes = webhookData.body?.clientes || webhookData.clientes || [];\n\n// 2. Pega as opções de investimento do nó \"Extract from File\"\nconst investimentos = $('Extract from File').all().map(item => item.json);\n\n// 3. Cruza os dados e gera a mensagem de recomendação\nreturn clientes.map(cliente => {\n  const perfilCliente = (cliente.perfil || '').toLowerCase();\n\n  // Filtra os produtos adequados ao perfil do cliente\n  const recomendacoes = investimentos.filter(inv => {\n    const perfilInvestimento = (inv.perfil || inv.Perfil || '').toLowerCase();\n    return perfilInvestimento === perfilCliente;\n  });\n\n  // Monta a lista de produtos formatada para a mensagem\n  const listaProdutos = recomendacoes.map(p => \n    `- **${p.produto}**: Aporte mínimo de R$ ${p.minimo} com rentabilidade estimada de ${p.rentabilidade}`\n  ).join('\\n');\n\n  // Cria a mensagem personalizada\n  const mensagem = `Olá, ${cliente.nome}!\\n\\n` +\n    `Analisamos o seu perfil de investidor (${cliente.perfil}) e preparamos as melhores opções para o seu saldo disponível de R$ ${cliente.saldo}:\\n\\n` +\n    `${listaProdutos}\\n\\n` +\n    `Se tiver dúvidas, estamos à disposição para te ajudar a rentabilizar o seu patrimônio!`;\n\n  return {\n    json: {\n      nome: cliente.nome,\n      email: cliente.email,\n      saldo: cliente.saldo,\n      perfil: cliente.perfil,\n      recomendacoes: recomendacoes,\n      mensagem_recomendacao: mensagem\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        176,
+        16
+      ],
+      "id": "16775bdc-c11a-406e-9cd0-baa642b08321",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        -48,
+        16
+      ],
+      "id": "33bef193-905e-41c3-99e6-c67249be79dc",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um consultor financeiro especialista em investimentos, humanizado, empático e profissional.\n\nGere uma mensagem personalizada para o seguinte cliente:\n\n- Nome: {{ $json.nome }}\n- Perfil de Investidor: {{ $json.perfil }}\n- Saldo Disponível: {{ $json.saldo }}\n- Opções de Investimento Recomendadas para o perfil:\n{{ JSON.stringify($json.recomendacoes) }}\n\nDiretrizes da mensagem:\n1. Trate o cliente pelo nome de forma amigável.\n2. Analise brevemente o perfil ({{ $json.perfil }}) e o saldo ({{ $json.saldo }}).\n3. Explique de forma simples e humanizada por que cada uma das opções sugeridas combina com o momento/perfil dele.\n4. Mantenha um tom encorajador e profissional.\n5. Finalize com um chamado à ação (se colocar à disposição para ajudar a aplicar).",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        400,
+        16
+      ],
+      "id": "a7497e08-43ae-4519-97c4-a2a06b098e0a",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        400,
+        208
+      ],
+      "id": "fcc4d2a7-e658-47c7-9a75-c44ba8c7bd23",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Code in JavaScript').item.json.email }}",
+        "subject": "Oportunidades selecionadas para o seu perfil de investidor",
+        "message": "={{ $('AI Agent').item.json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        -256
+      ],
+      "id": "e6bc7755-39e5-4b31-9e5f-97d8ffa4dd9e",
+      "name": "Send a message",
+      "webhookId": "a90dca25-6383-4ad3-8881-21f956b989c6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "Zm6q5m5zuggUeuIf",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "9e9ef68c-0e43-4995-8e0f-3a7017c50b83",
+              "leftValue": "={{ $('Code in JavaScript').item.json.email }}",
+              "rightValue": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        656,
+        -128
+      ],
+      "id": "ec9fd163-9f72-4395-b563-569180f4497e",
+      "name": "If"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "fc48f790-b24a-4867-8866-decb05e57d3e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7457b1cfe6d782909a0c25c290c68e87e6fb86a515e0bcf02346f847ba13cdd9"
+  },
+  "nodeGroups": [],
+  "id": "6CkTcgAmkXh1YkH3",
+  "tags": []
+}
